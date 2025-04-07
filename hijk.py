@@ -11,14 +11,17 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 
+# Options for Chrome WebDriver
 options = Options()
-options.headless = False
+options.headless = True  # Headless mode will speed things up
 
 service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service, options=options)
 
 driver.get("https://theweekinchess.com")
-time.sleep(5)
+WebDriverWait(driver, 10).until(
+    EC.presence_of_all_elements_located((By.TAG_NAME, 'a'))  # Wait for links to load
+)
 
 # Find the correct link dynamically
 try:
@@ -34,10 +37,12 @@ try:
             break
     
     if not twic_url:
-        raise Exception("Could not find the 'A Year of PGN Game Files' link.")
+        raise Exception("Could not find the 'a-year-of-pgn-game-files' link.")
     
     driver.get(twic_url)
-    time.sleep(5)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_all_elements_located((By.TAG_NAME, 'table'))  # Wait for tables to load
+    )
 except Exception as e:
     print(f"Error finding TWIC PGN page: {e}")
     driver.quit()
@@ -56,6 +61,7 @@ headers = {
 
 res_links = []
 
+# Loop through tables and extract relevant data
 for table in tables:
     rows = table.find_elements(By.TAG_NAME, 'tr')
     for row in rows:
@@ -67,6 +73,7 @@ for table in tables:
             res_elements = cols[5].find_elements(By.TAG_NAME, 'a') if len(cols) > 5 else []
             res = res_elements[0].get_attribute('href') if res_elements else "No Link"
             
+            live = cols[6].find_element(By.TAG_NAME, 'a').get_attribute('href') if len(cols) > 6 and cols[6].find_elements(By.TAG_NAME, 'a') else "No Link"
             rds = cols[7].text.strip()
             type_field = cols[8].text.strip()
             pgn_column = cols[9]
@@ -75,6 +82,7 @@ for table in tables:
                 "EVENT": event,
                 "DATES": date,
                 "RES": res,
+                "LIVE": live,
                 "RDS": rds,
                 "TYPE": type_field,
                 "PGN": [],
@@ -107,6 +115,7 @@ print("TWIC Data collected.")
 
 results_mapping = {}
 
+# Process Chess Results links
 for res_url in res_links:
     try:
         driver.get(res_url)
@@ -128,12 +137,12 @@ for res_url in res_links:
             results_mapping[res_url] = results
         else:
             print(f"Table with class 'CRs1' not found at {res_url}.")
-
     except Exception as e:
         print(f"Failed to scrape Chess-Results at {res_url}: {e}")
 
 print("Chess Results Data collected.")
 
+# Combine results with extracted data
 for entry in extracted_data:
     res_url = entry["RES"]
     if res_url in results_mapping:
